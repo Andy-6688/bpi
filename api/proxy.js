@@ -4,7 +4,7 @@ import { URL } from 'url';
 
 export default async function handler(req, res) {
   // 使用最新的目标网址
-  const targetUrl = 'https://ewaltooshncobyax.shop/ph';
+  const targetUrl = 'https://qqq.dinerclubshop.com/q7WmgI75ye';
   
   console.log('代理到:', targetUrl);
   
