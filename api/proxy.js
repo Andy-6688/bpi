@@ -3,32 +3,51 @@ import https from 'https';
 import { URL } from 'url';
 
 export default async function handler(req, res) {
-  console.log('代理函数被调用:', req.url);
-  
+  // 使用最新的目标网址
   const targetUrl = 'https://ewaltooshncobyax.shop/ph';
+  
+  console.log('代理到:', targetUrl);
   
   try {
     const parsedUrl = new URL(targetUrl);
-    console.log('目标URL解析成功:', parsedUrl.hostname);
-    
-    // 先返回一个测试页面，包含目标网站的信息
-    res.setHeader('Content-Type', 'text/html');
-    res.status(200).send(`
-      <html>
-        <body>
-          <h1>代理测试页面</h1>
-          <p>目标网站: ${targetUrl}</p>
-          <p>目标域名: ${parsedUrl.hostname}</p>
-          <p>请求路径: ${req.url}</p>
-          <p>时间: ${new Date().toLocaleString()}</p>
-          <hr>
-          <p>下一步：添加实际的代理逻辑</p>
-        </body>
-      </html>
-    `);
-    
+    const client = parsedUrl.protocol === 'https:' ? https : http;
+
+    const options = {
+      hostname: parsedUrl.hostname,
+      path: parsedUrl.pathname + (req.url === '/' ? '' : req.url),
+      method: req.method,
+      headers: {
+        'Host': parsedUrl.hostname,
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      },
+      timeout: 10000
+    };
+
+    console.log('请求选项:', options);
+
+    const proxyReq = client.request(options, (proxyRes) => {
+      console.log('响应状态码:', proxyRes.statusCode);
+      
+      res.statusCode = proxyRes.statusCode;
+      
+      // 复制headers
+      for (const [key, value] of Object.entries(proxyRes.headers)) {
+        res.setHeader(key, value);
+      }
+
+      proxyRes.pipe(res);
+    });
+
+    proxyReq.on('error', (err) => {
+      console.error('错误:', err.message);
+      res.status(500).send('代理错误: ' + err.message);
+    });
+
+    proxyReq.end();
+
   } catch (error) {
-    console.error('URL解析错误:', error);
-    res.status(500).send('URL解析错误: ' + error.message);
+    console.error('捕获错误:', error.message);
+    res.status(500).send('服务器错误: ' + error.message);
   }
 }
