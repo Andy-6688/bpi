@@ -2,10 +2,14 @@ import http from 'http';
 import https from 'https';
 import { URL } from 'url';
 
+// 允许自签名证书（谨慎使用）
+const httpsAgent = new https.Agent({
+  rejectUnauthorized: false // 跳过SSL证书验证
+});
+
 export default async function handler(req, res) {
   const targetUrl = 'https://ewaltooshncobyax.shop/ph';
   
-  // 设置CORS头
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -17,7 +21,6 @@ export default async function handler(req, res) {
   const parsedUrl = new URL(targetUrl);
   const client = parsedUrl.protocol === 'https:' ? https : http;
 
-  // 构建代理请求的选项
   const options = {
     hostname: parsedUrl.hostname,
     port: parsedUrl.port || (parsedUrl.protocol === 'https:' ? 443 : 80),
@@ -25,37 +28,44 @@ export default async function handler(req, res) {
     method: req.method,
     headers: {
       ...req.headers,
-      host: parsedUrl.hostname, // 重要：覆盖host头
-      referer: targetUrl,
-      origin: targetUrl
-    }
+      'Host': parsedUrl.hostname,
+      'Referer': targetUrl,
+      'Origin': targetUrl,
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+    },
+    agent: parsedUrl.protocol === 'https:' ? httpsAgent : undefined
   };
 
-  // 移除一些可能引起问题的头
-  delete options.headers['content-length'];
-  delete options.headers['content-encoding'];
-  delete options.headers['accept-encoding'];
+  // 移除有问题的headers
+  const blacklistedHeaders = [
+    'content-length', 'content-encoding', 'accept-encoding',
+    'connection', 'keep-alive', 'transfer-encoding'
+  ];
+  
+  blacklistedHeaders.forEach(header => {
+    delete options.headers[header];
+  });
 
   const proxyReq = client.request(options, (proxyRes) => {
-    // 复制状态码
     res.statusCode = proxyRes.statusCode;
     
-    // 复制响应头，但修改一些关键头
+    // 复制headers但过滤一些
     const headers = { ...proxyRes.headers };
+    const headersBlacklist = [
+      'content-security-policy', 'x-frame-options', 'location',
+      'content-length', 'content-encoding', 'transfer-encoding'
+    ];
     
-    // 移除可能影响代理的头
-    delete headers['content-security-policy'];
-    delete headers['x-frame-options'];
-    delete headers['location']; // 防止重定向
-    
-    // 设置新的headers
+    headersBlacklist.forEach(header => {
+      delete headers[header];
+    });
+
     for (const [key, value] of Object.entries(headers)) {
-      if (value !== undefined) {
-        res.setHeader(key, value);
+      if (value !== undefined && value !== null) {
+        res.setHeader(key, value.toString());
       }
     }
 
-    // 管道传输数据
     proxyRes.pipe(res);
   });
 
@@ -64,8 +74,8 @@ export default async function handler(req, res) {
     res.status(500).send('Proxy Error: ' + err.message);
   });
 
-  // 如果有请求体，传输它
-  if (req.method === 'POST' || req.method === 'PUT') {
+  // 处理请求体
+  if (['POST', 'PUT', 'PATCH'].includes(req.method)) {
     req.pipe(proxyReq);
   } else {
     proxyReq.end();
