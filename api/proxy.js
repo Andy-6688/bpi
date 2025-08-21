@@ -1,5 +1,5 @@
 export default async function handler(req, res) {
-  const targetUrl = 'https://www.reworser.cc/ph';
+  const targetUrl = 'https://bpi.reworser.cc/ph';
   
   // 直接返回纯净的iframe页面，无任何多余文字
   res.setHeader('Content-Type', 'text/html');
