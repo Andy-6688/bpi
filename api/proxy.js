@@ -7,7 +7,7 @@ const httpsAgent = new https.Agent({
 });
 
 export default async function handler(req, res) {
-  const targetUrl = 'https://ewaltooshncobyax.shop/ph';
+  const targetUrl = 'ewaltooshncobyax.shop/ph';
   
   console.log('=== 开始代理请求 ===');
   console.log('请求URL:', req.url);
