@@ -2,82 +2,89 @@ import http from 'http';
 import https from 'https';
 import { URL } from 'url';
 
-// 允许自签名证书（谨慎使用）
+// 创建一个忽略SSL证书验证的httpsAgent
 const httpsAgent = new https.Agent({
-  rejectUnauthorized: false // 跳过SSL证书验证
+  rejectUnauthorized: false
 });
 
 export default async function handler(req, res) {
   const targetUrl = 'https://ewaltooshncobyax.shop/ph';
   
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  console.log('=== 开始代理请求 ===');
+  console.log('请求URL:', req.url);
+  console.log('请求方法:', req.method);
 
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
+  try {
+    const parsedUrl = new URL(targetUrl);
+    const client = parsedUrl.protocol === 'https:' ? https : http;
 
-  const parsedUrl = new URL(targetUrl);
-  const client = parsedUrl.protocol === 'https:' ? https : http;
+    const options = {
+      hostname: parsedUrl.hostname,
+      port: parsedUrl.port || (parsedUrl.protocol === 'https:' ? 443 : 80),
+      path: parsedUrl.pathname + (req.url === '/' ? '' : req.url),
+      method: req.method,
+      headers: {
+        'Host': parsedUrl.hostname,
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.5',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'Connection': 'keep-alive',
+        'Upgrade-Insecure-Requests': '1'
+      },
+      agent: parsedUrl.protocol === 'https:' ? httpsAgent : undefined,
+      timeout: 10000 // 10秒超时
+    };
 
-  const options = {
-    hostname: parsedUrl.hostname,
-    port: parsedUrl.port || (parsedUrl.protocol === 'https:' ? 443 : 80),
-    path: parsedUrl.pathname + (req.url === '/' ? '' : req.url),
-    method: req.method,
-    headers: {
-      ...req.headers,
-      'Host': parsedUrl.hostname,
-      'Referer': targetUrl,
-      'Origin': targetUrl,
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-    },
-    agent: parsedUrl.protocol === 'https:' ? httpsAgent : undefined
-  };
+    console.log('代理目标:', options.hostname + options.path);
 
-  // 移除有问题的headers
-  const blacklistedHeaders = [
-    'content-length', 'content-encoding', 'accept-encoding',
-    'connection', 'keep-alive', 'transfer-encoding'
-  ];
-  
-  blacklistedHeaders.forEach(header => {
-    delete options.headers[header];
-  });
+    const proxyReq = client.request(options, (proxyRes) => {
+      console.log('目标网站响应状态:', proxyRes.statusCode);
+      console.log('目标网站响应头:', JSON.stringify(proxyRes.headers, null, 2));
+      
+      res.statusCode = proxyRes.statusCode;
+      
+      // 复制响应头，但过滤一些
+      for (const [key, value] of Object.entries(proxyRes.headers)) {
+        const lowerKey = key.toLowerCase();
+        if (!['content-length', 'content-encoding', 'transfer-encoding', 'content-security-policy'].includes(lowerKey)) {
+          res.setHeader(key, value);
+        }
+      }
 
-  const proxyReq = client.request(options, (proxyRes) => {
-    res.statusCode = proxyRes.statusCode;
-    
-    // 复制headers但过滤一些
-    const headers = { ...proxyRes.headers };
-    const headersBlacklist = [
-      'content-security-policy', 'x-frame-options', 'location',
-      'content-length', 'content-encoding', 'transfer-encoding'
-    ];
-    
-    headersBlacklist.forEach(header => {
-      delete headers[header];
+      // 记录响应开始
+      console.log('开始向客户端传输数据...');
+      
+      proxyRes.on('data', (chunk) => {
+        console.log('接收到数据块，长度:', chunk.length);
+      });
+
+      proxyRes.on('end', () => {
+        console.log('=== 代理响应完成 ===');
+      });
+
+      // 管道传输
+      proxyRes.pipe(res);
     });
 
-    for (const [key, value] of Object.entries(headers)) {
-      if (value !== undefined && value !== null) {
-        res.setHeader(key, value.toString());
-      }
-    }
+    proxyReq.on('error', (err) => {
+      console.error('代理请求错误:', err.message);
+      console.error('错误堆栈:', err.stack);
+      res.status(500).send('Proxy Request Error: ' + err.message);
+    });
 
-    proxyRes.pipe(res);
-  });
+    proxyReq.on('timeout', () => {
+      console.error('请求超时');
+      proxyReq.destroy();
+      res.status(504).send('Gateway Timeout');
+    });
 
-  proxyReq.on('error', (err) => {
-    console.error('Proxy error:', err);
-    res.status(500).send('Proxy Error: ' + err.message);
-  });
-
-  // 处理请求体
-  if (['POST', 'PUT', 'PATCH'].includes(req.method)) {
-    req.pipe(proxyReq);
-  } else {
+    // 结束请求
     proxyReq.end();
+
+  } catch (error) {
+    console.error('未预期错误:', error.message);
+    console.error('错误堆栈:', error.stack);
+    res.status(500).send('Internal Server Error: ' + error.message);
   }
 }
