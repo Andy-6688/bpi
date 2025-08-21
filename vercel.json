@@ -1,0 +1,21 @@
+json
+{
+  "functions": {
+    "api/proxy.js": {
+      "maxDuration": 30
+    }
+  },
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "/api/proxy.js"
+    }
+  ]
+}
+最终，你的文件夹结构应该是这样的：
+
+text
+vercel-proxy/     （你的项目根目录）
+├── api/          （文件夹）
+│   └── proxy.js  （核心代理文件）
+└── vercel.json   （配置文件）
